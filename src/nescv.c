@@ -129,6 +129,22 @@ void nescv_bands(const uint8_t *log, int crop, int quantum, nescv_picture_t *p) 
 
 // ---- the pattern cache index (gbcv.c's) ------------------------------------------
 
+// two cells' 16 bytes compared: memcmp, which is what every plugin that has
+// run on the console is built with; four words where NESCV_BESIDE is
+// defined (the PC Engine plugin, whose pictures are new in most cells:
+// newlib's memcmp goes a byte at a time, 2 ms of a picture's start)
+#ifdef NESCV_BESIDE
+static inline uint32_t key_differs(const uint8_t *a, const uint8_t *b) {
+    uint32_t x[4], y[4];
+    memcpy(x, a, 16);
+    memcpy(y, b, 16);
+    return (x[0] ^ y[0]) | (x[1] ^ y[1]) | (x[2] ^ y[2]) | (x[3] ^ y[3]);
+}
+#define KEYCMP(a, b) key_differs(a, b)
+#else
+#define KEYCMP(a, b) memcmp(a, b, 16)
+#endif
+
 NESCV_HOT static uint32_t hash(const uint8_t *k) {
     uint32_t h = 2166136261u;
     for (int i = 0; i < 16; i++) h = (h ^ k[i]) * 16777619u;
@@ -142,7 +158,7 @@ NESCV_HOT static int idx_get(nescv_t *e, int t, const uint8_t *k) {
     uint32_t i = hash(k) & (NESCV_HASH - 1);
     for (int n = 0; n < NESCV_HASH; n++, i = (i + 1) & (NESCV_HASH - 1)) {
         if (!tab[i].used) return -1;
-        if (!memcmp(tab[i].key, k, 16)) return tab[i].slot;
+        if (!KEYCMP(tab[i].key, k)) return tab[i].slot;
     }
     return -1;
 }
@@ -151,7 +167,7 @@ NESCV_HOT static void idx_put(nescv_t *e, int t, const uint8_t *k, uint8_t slot)
     nescv_ent_t *tab = e->index[t];
     uint32_t i = hash(k) & (NESCV_HASH - 1);
     int n = 0;
-    while (tab[i].used && memcmp(tab[i].key, k, 16)) {
+    while (tab[i].used && KEYCMP(tab[i].key, k)) {
         i = (i + 1) & (NESCV_HASH - 1);
         if (++n == NESCV_HASH) {           // full (it can't be): start the index again
             memset(tab, 0, sizeof e->index[t]);
@@ -169,7 +185,7 @@ NESCV_HOT static void idx_put(nescv_t *e, int t, const uint8_t *k, uint8_t slot)
 NESCV_HOT static void idx_del(nescv_t *e, int t, const uint8_t *k) {
     nescv_ent_t *tab = e->index[t];
     uint32_t i = hash(k) & (NESCV_HASH - 1);
-    for (int n = 0; tab[i].used && memcmp(tab[i].key, k, 16); n++) {
+    for (int n = 0; tab[i].used && KEYCMP(tab[i].key, k); n++) {
         if (n == NESCV_HASH) return;
         i = (i + 1) & (NESCV_HASH - 1);
     }
@@ -193,7 +209,7 @@ int nescv_check_index(const nescv_t *e) {
     for (int t = 0; t < 3; t++)
         for (int i = 0; i < NESCV_HASH; i++) {
             const nescv_ent_t *x = &e->index[t][i];
-            if (x->used && memcmp(e->pat[t][x->slot], x->key, 16)) bad++;
+            if (x->used && KEYCMP(e->pat[t][x->slot], x->key)) bad++;
         }
     return bad;
 }
@@ -303,7 +319,7 @@ NESCV_HOT static void band_cells(nescv_t *e, int r, const uint8_t *band, long pi
                 col[x] = lut[px[x]];
                 key = key << 4 | col[x];
             }
-            nescv_memo_t *m = &e->memo[(key * 2654435761u) >> (32 - 12)];
+            nescv_memo_t *m = &e->memo[(key * 2654435761u) >> (32 - NESCV_MEMO_BITS)];
             if (m->key == key) {
                 hits++;
             } else {
@@ -341,7 +357,7 @@ NESCV_HOT static void band_cells_luts(nescv_t *e, int r, const uint8_t *band, lo
                 col[x + 1] = l1[px[x + 1]];
                 key = key << 8 | (uint32_t)(col[x] << 4 | col[x + 1]);
             }
-            nescv_memo_t *m = &e->memo[(key * 2654435761u) >> (32 - 12)];
+            nescv_memo_t *m = &e->memo[(key * 2654435761u) >> (32 - NESCV_MEMO_BITS)];
             if (m->key == key) {
                 hits++;
             } else {
@@ -392,6 +408,54 @@ NESCV_HOT void nescv_band_luts(nescv_t *e, int r, const uint8_t *px, long pitch,
 #endif
 
 void nescv_band_done(nescv_t *e, uint64_t index, uint8_t backdrop) { picture_done(e, index, backdrop); }
+
+#ifdef NESCV_BESIDE
+// band_cells() into the caller's cells, for a picture made over several TV
+// frames beside the encoder (the PC Engine plugin: nescv_cells(),
+// nescv_offer_cells()). Its own copy, built only where NESCV_BESIDE is
+// defined, for the reason band_cells_luts() is.
+NESCV_HOT uint32_t nescv_cells(nescv_t *e, const uint8_t *band, long pitch, const uint8_t *lut, uint8_t (*cells)[16]) {
+    uint32_t clash = 0, hits = 0, misses = 0;
+    for (int c = 0; c < NESCV_COLS; c++) {
+        uint8_t *cell = cells[c];
+        const uint8_t *px = band + c * 8;
+        for (int y = 0; y < 8; y++, px += pitch) {
+            uint8_t col[8];
+            uint32_t key = 0;
+            for (int x = 0; x < 8; x++) {
+                col[x] = lut[px[x]];
+                key = key << 4 | col[x];
+            }
+            nescv_memo_t *m = &e->memo[(key * 2654435761u) >> (32 - NESCV_MEMO_BITS)];
+            if (m->key == key) {
+                hits++;
+            } else {
+                misses++;
+                m->key = key;
+                m->clash = (uint8_t)row_cols(col, &m->pat, &m->colour);
+            }
+            cell[y] = m->pat;
+            cell[8 + y] = m->colour;
+            clash += m->clash;
+        }
+    }
+    e->stats.memo_hits += hits;
+    e->stats.memo_misses += misses;
+    return clash;
+}
+
+bool nescv_takes_cells(const nescv_t *e) {
+    return !e->has_latest && !(e->has_target && e->up_head != e->up_tail);
+}
+
+bool nescv_offer_cells(nescv_t *e, const uint8_t (*cells)[16], uint32_t clash, uint64_t index, uint8_t backdrop) {
+    if (!nescv_takes_cells(e)) return false;
+    memcpy(e->latest, cells, sizeof e->latest);
+    e->band_clash = clash;
+    picture_done(e, index, backdrop);
+    return true;
+}
+#endif
 
 #ifndef NESCV_020
 // how far a cell's new look is from what it shows now: pattern bits that
@@ -483,7 +547,7 @@ NESCV_HOT static void start(nescv_t *e) {
         const int t = i >> 8, s = front[i];
         busy[t][s] = true;
         if (first[t][s] < 0) first[t][s] = (int16_t)i;
-        else if (!mixed[t][s] && memcmp(e->latest[i], e->latest[first[t][s]], 16)) mixed[t][s] = true;
+        else if (!mixed[t][s] && KEYCMP(e->latest[i], e->latest[first[t][s]])) mixed[t][s] = true;
     }
     e->up_head = e->up_tail = 0;
     // the cells in a slot already
@@ -520,6 +584,20 @@ NESCV_HOT static void start(nescv_t *e) {
     // (they show it early), or else keeps its old look for this picture
     // (held: the next picture has the slots this one frees). Cells that
     // can't take their own go first.
+#if defined(NESCV_BESIDE) && !defined(NESCV_PICK_SCAN)   // (NESCV_PICK_SCAN: a test's, to compare the two)
+    // each third's slots not on screen, least recently shown first (a slot
+    // a cell takes meanwhile is passed over when its turn comes)
+    static uint8_t free_list[3][256];
+    int free_n[3] = {0, 0, 0}, free_at[3] = {0, 0, 0};
+    for (int t = 0; t < 3 && misses; t++)
+        for (int k = 0; k < 256; k++) {
+            if (busy[t][k]) continue;
+            const uint32_t age = e->age[t][k];
+            int at = free_n[t]++;
+            while (at > 0 && e->age[t][free_list[t][at - 1]] > age) { free_list[t][at] = free_list[t][at - 1]; at--; }
+            free_list[t][at] = (uint8_t)k;
+        }
+#endif
     const int nmiss = misses;
     for (int pass = 0; pass < 2 && misses; pass++)
         for (int m = 0; m < nmiss; m++) {
@@ -541,8 +619,17 @@ NESCV_HOT static void start(nescv_t *e) {
             const bool own_ok = !mine[t][own] && !mixed[t][own];
             if (pass == 0 && own_ok) continue;
             int pick = -1;
+#if defined(NESCV_BESIDE) && !defined(NESCV_PICK_SCAN)
+            // the same slot the loop below finds (the least recently shown
+            // that is free, the lowest of equals), from the third's free
+            // slots in that order: a picture new in every cell is 768
+            // times 256 steps of that loop, 20 ms and more of the cart's time
+            while (free_at[t] < free_n[t] && mine[t][free_list[t][free_at[t]]]) free_at[t]++;
+            if (free_at[t] < free_n[t]) pick = free_list[t][free_at[t]++];
+#else
             for (int k = 0; k < 256; k++)
                 if (!busy[t][k] && !mine[t][k] && (pick < 0 || e->age[t][k] < e->age[t][pick])) pick = k;
+#endif
             if (pick < 0) {
                 e->stats.overflow++;
                 if (!own_ok) {
@@ -730,6 +817,19 @@ bool nescv_reg(nescv_t *e, uint8_t r, uint8_t v) {
     e->extra_t += C_REG;
     return true;
 }
+
+#ifdef NESCV_BESIDE
+// What nescv_tv_frame() does when it finds a picture offered and none going
+// in (the cells looked up, their slots chosen: up to 10 ms of the cart's
+// time for a picture that is all new), done now instead, by a caller with
+// time to spare before its next list is due. True if it did.
+bool nescv_prepare(nescv_t *e) {
+    if (e->has_target || !e->has_latest) return false;
+    e->has_latest = false;
+    if (e->latest_index > e->shown_index) start(e);
+    return true;
+}
+#endif
 
 NESCV_HOT size_t nescv_tv_frame(nescv_t *e, const uint8_t *psg, int npsg, uint8_t *out) {
     e->now++;

@@ -86,7 +86,10 @@ typedef struct {
 
 #define NESCV_HASH 512   // per third, a power of two
 #define NESCV_EXTRA_MAX 160   // bytes of the caller's writes a list takes
-#define NESCV_MEMO 4096  // rows remembered, a power of two
+#ifndef NESCV_MEMO_BITS  // (a plugin short of RAM sets fewer: 8 bytes a row)
+#define NESCV_MEMO_BITS 12
+#endif
+#define NESCV_MEMO (1 << NESCV_MEMO_BITS)  // rows remembered
 
 typedef struct {
     uint16_t cell;       // latest[cell] goes in
@@ -169,6 +172,22 @@ void nescv_band(nescv_t *e, int r, const uint8_t *px, long pitch, const uint8_t 
 // (the Master System plugin's grey background). Built with -DNESCV_LUTS.
 void nescv_band_luts(nescv_t *e, int r, const uint8_t *px, long pitch, const uint8_t *const luts[4]);
 void nescv_band_done(nescv_t *e, uint64_t index, uint8_t backdrop);
+// A picture made beside the encoder, over as many TV frames as it takes
+// (the PC Engine plugin, which draws a frame after the game has run it).
+// Built with -DNESCV_BESIDE. nescv_cells(): a band's 8 lines (as
+// nescv_band()'s) as its 32 cells, into the caller's; returns the rows that
+// lost a colour. nescv_offer_cells(): the whole picture's 768 cells, with
+// the sum of those; false (and not taken) unless nescv_takes_cells(): the
+// last picture offered has been started, and its cells have gone to the
+// console.
+uint32_t nescv_cells(nescv_t *e, const uint8_t *px, long pitch, const uint8_t *lut, uint8_t (*cells)[16]);
+bool nescv_takes_cells(const nescv_t *e);
+bool nescv_offer_cells(nescv_t *e, const uint8_t (*cells)[16], uint32_t clash, uint64_t index, uint8_t backdrop);
+// The start of an offered picture (its cells looked up and given slots:
+// the costly part of the nescv_tv_frame() that begins one) done now, when
+// no picture is going in; true if it did. For the time a caller has to
+// spare, so that its lists are never late for it.
+bool nescv_prepare(nescv_t *e);
 
 // this TV frame's list into out (NESCV_LIST_MAX bytes); returns its length
 size_t nescv_tv_frame(nescv_t *e, const uint8_t *psg, int npsg, uint8_t *out);

@@ -30,8 +30,8 @@ include(${PARROTCART_SDK}/sdk/cvplugin.cmake)
 
 # The same source makes the same file, whenever it's built: the compiler's
 # __DATE__ and __TIME__ (the build date in the binary info) come from
-# SOURCE_DATE_EPOCH, fixed here at the tested build's, 2026-11-15 19:28:57 UTC.
-set(BUILD_EPOCH 1794770937)
+# SOURCE_DATE_EPOCH, fixed here at the tested build's day, 2026-11-18.
+set(BUILD_EPOCH 1795003200)
 set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env SOURCE_DATE_EPOCH=${BUILD_EPOCH})
 set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env SOURCE_DATE_EPOCH=${BUILD_EPOCH})
 
@@ -54,11 +54,12 @@ target_compile_definitions(sms PRIVATE LSB_FIRST=1 SMS_224_SHIFT=16 CACHEDTILES=
 # .bss. The SDK's printf without floats (nothing here prints one): 2K.
 target_compile_definitions(sms PRIVATE PICO_PRINTF_SUPPORT_FLOAT=0 PICO_PRINTF_SUPPORT_EXPONENTIAL=0)
 cvframes_use(sms)
+cvframes_serve2(sms)   # core 1's bus loop acts on two samples of the pins that agree (sdk/cvfserve.S)
 cvsd_use(sms)
 cvpsram_use(sms)
 cvpad_use(sms)                              # USB game pads: the port is a host
 pico_enable_stdio_usb(sms 0)
 pico_enable_stdio_uart(sms 0)
-cvcart_plugin(sms ID parrotcart.mastersystem NAME "SMS & Game Gear" VERSION 0.2.4 BY "Parrot Cart"
+cvcart_plugin(sms ID parrotcart.mastersystem NAME "SMS & Game Gear" VERSION 0.2.5 BY "Parrot Cart"
               HOME /SMS OPENS .sms .gg .sg USES usb-host psram ICON src/sms_icon.txt FILE_ICON src/sms_file_icon.txt
               README CART-README.md)
