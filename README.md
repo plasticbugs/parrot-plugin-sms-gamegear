@@ -18,7 +18,7 @@ On the ColecoVision controller:
 - Keypad 0 switches between smooth scrolling and scrolling by tiles.
 - Keypad 1 switches the background between the game's colors, gray, and off.
 - Hold keypad 7 for a second to save a state, or 9 to load it.
-- Press RESET on the console to go back to the menu.
+- Press RESET on the console to go back to the menu, or hold both fire buttons and \* for 2 seconds (Select and Start on a USB pad).
 
 On a USB pad:
 

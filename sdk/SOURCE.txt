@@ -1,4 +1,9 @@
-commit 94ab2d7c52d229dadcbc428db15c222c2a7d1a48
-date   2026-11-18T12:25:13-08:00
-about  Every frame plugin on cvfserve.S, the two-sample bus loop
-copied 2026-11-18 by tools/update-sdk.sh
+commit fbf61cef6dd2d1ab39e947bfa5abca7e93b2cba4
+date   2026-11-21T18:36:55-08:00
+about  Feature Test 0.1.1, Game Boy 0.1.4, NES 0.4.9, PC Engine 0.1.2, SMS 0.2.6, Text Editor 0.1.1, Vectrex 0.1.5: the hub fix
+copied 2026-11-23 by tools/update-sdk.sh
+
+also: back to the menu from the controllers (both fire buttons and * or
+a USB pad's Select and Start held for 2 s), in cvhome.h, cvkernel.c/.h,
+cvframes.c/.h and cvpad.c/.h, added by tools/add-home.py from the plugin
+template (https://github.com/plasticbugs/parrot-plugin-template)
