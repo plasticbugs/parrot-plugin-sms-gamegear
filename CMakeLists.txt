@@ -60,6 +60,6 @@ cvpsram_use(sms)
 cvpad_use(sms)                              # USB game pads: the port is a host
 pico_enable_stdio_usb(sms 0)
 pico_enable_stdio_uart(sms 0)
-cvcart_plugin(sms ID parrotcart.mastersystem NAME "SMS & Game Gear" VERSION 0.2.7 BY "Parrot Cart"
+cvcart_plugin(sms ID parrotcart.mastersystem NAME "SMS & Game Gear" VERSION 0.2.8 BY "Parrot Cart"
               HOME /SMS OPENS .sms .gg .sg USES usb-host psram ICON src/sms_icon.txt FILE_ICON src/sms_file_icon.txt
               README CART-README.md)

@@ -1,4 +1,3 @@
-Changes since 0.2.5:
+Changes since 0.2.7:
 
-- A game pad already on a powered hub when you start is found, and pads plugged in or pulled out while you play are seen.
-- Hold both fire buttons and * on controller 1 for 2 seconds, or Select and Start on a USB pad, to go back to the menu.
+- Game Gear games whose file names are longer than 32 characters now run as Game Gear games. Before, they ran as Master System games, with the wrong colours, no Game Gear window and no Start button.

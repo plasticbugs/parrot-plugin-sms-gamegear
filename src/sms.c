@@ -732,10 +732,13 @@ int main(void) {
     if (b && b->path[0]) {          // (the block becomes a return block below: what's needed, copied)
         memcpy(path, b->path, sizeof path);
         const char *slash = strrchr(path, '/');
-        snprintf(name, sizeof name, "%.32s", slash ? slash + 1 : path);   // a line of the screen at most
-        type = smscore_type_of(name);
-        char *dot = strrchr(name, '.');   // the title without its extension
-        if (dot && dot != name) *dot = 0;
+        const char *file = slash ? slash + 1 : path;
+        // the system from the whole name: most Game Gear games' names are
+        // longer than the title's line, and a cut one loses its ".gg"
+        type = smscore_type_of(file);
+        // the title: the name without its extension, a line of the screen at most
+        const char *dot = strrchr(file, '.');
+        snprintf(name, sizeof name, "%.*s", dot && dot != file ? (int)(dot - file) : (int)strlen(file), file);
         size_t d = slash ? (size_t)(slash - path) : 0;
         memcpy(rom_dir, path, d);
         rom_dir[d] = 0;
